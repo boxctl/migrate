@@ -7,6 +7,14 @@ import { bootstrap } from "../bootstrap.js";
 
 const MIGRATIONS_DIR = "./migrations";
 
+function isSqlEmpty(sql) {
+    const lines = sql.split("\n");
+    return lines.every((line) => {
+        const trimmed = line.trim();
+        return trimmed === "" || trimmed.startsWith("--");
+    });
+}
+
 function prompt(question) {
     return new Promise((resolve) => {
         const rl = createInterface({
@@ -35,10 +43,7 @@ export async function down(n = 1) {
     const count = parseInt(n, 10);
 
     if (isNaN(count) || count < 1) {
-        console.error(
-            "Usage: migrate down [n]  — n must be a positive integer",
-        );
-        process.exit(1);
+        throw new Error("Usage: migrate down [n]  — n must be a positive integer");
     }
 
     await bootstrap();
@@ -70,26 +75,25 @@ export async function down(n = 1) {
         const downFile = join(MIGRATIONS_DIR, `${name}.down.sql`);
 
         if (!existsSync(downFile)) {
-            console.error(`Down file not found for migration: ${name}`);
-            console.error(`Expected: ${downFile}`);
-            process.exit(1);
+            throw new Error(
+                `Down file not found for migration: ${name}\nExpected: ${downFile}`,
+            );
         }
 
         const sql = readFileSync(downFile, "utf8").trim();
 
-        if (!sql || sql.startsWith("--")) {
-            console.error(`Down file is empty for migration: ${name}`);
-            process.exit(1);
+        if (isSqlEmpty(sql)) {
+            throw new Error(
+                `Down file is empty for migration: ${name}`,
+            );
         }
 
         console.log(`  Cleaning up: ${name}`);
         try {
-            await db.query(sql);
             await db.query("DELETE FROM migrations WHERE name = ?", [name]);
+            await db.query(sql);
         } catch (err) {
-            console.error(`Cleanup failed: ${name}`);
-            console.error(err.message);
-            process.exit(1);
+            throw new Error(`Cleanup failed: ${name}\n${err.message}`);
         }
     }
 

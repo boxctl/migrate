@@ -6,8 +6,7 @@ const MIGRATIONS_DIR = "./migrations";
 
 export async function create(name) {
     if (!name || name.trim() === "") {
-        console.error("Usage: migrate create <name>");
-        process.exit(1);
+        throw new Error("Usage: migrate create <name>");
     }
 
     // sanitize name: lowercase, spaces to underscores, strip special chars
@@ -18,8 +17,7 @@ export async function create(name) {
         .replace(/[^a-z0-9_]/g, "");
 
     if (safeName === "") {
-        console.error("Migration name is invalid after sanitization.");
-        process.exit(1);
+        throw new Error("Migration name is invalid after sanitization.");
     }
 
     const now = new Date();
@@ -38,8 +36,7 @@ export async function create(name) {
     const downFile = join(MIGRATIONS_DIR, `${baseName}.down.sql`);
 
     if (existsSync(upFile) || existsSync(downFile)) {
-        console.error(`Migration files for "${baseName}" already exist.`);
-        process.exit(1);
+        throw new Error(`Migration files for "${baseName}" already exist.`);
     }
 
     writeFileSync(upFile, `-- migrate up: ${safeName}\n`);

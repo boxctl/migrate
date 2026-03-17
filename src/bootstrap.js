@@ -6,9 +6,11 @@ export async function bootstrap() {
     try {
         await db.query(`
     CREATE TABLE IF NOT EXISTS migrations (
-      id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      name        VARCHAR(255) NOT NULL UNIQUE,
-      ran_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+      id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      name      VARCHAR(255) NOT NULL UNIQUE,
+      checksum  VARCHAR(64),
+      dirty     BOOLEAN DEFAULT FALSE,
+      ran_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
     } catch (err) {

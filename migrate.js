@@ -42,12 +42,14 @@ async function main() {
             await status();
             break;
         }
+        default:
+            throw new Error(`Unknown command: ${command}`);
     }
 }
 
 main()
     .catch((err) => {
-        console.error("Unexpected error:", err.message);
+        console.error(err.message);
         process.exit(1);
     })
     .finally(async () => {
@@ -55,6 +57,6 @@ main()
             const db = await getDb();
             await db.end();
         } catch {
-            // connection may already be closed
+            // connection may already be closed or never opened
         }
     });

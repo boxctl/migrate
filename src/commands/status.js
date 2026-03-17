@@ -11,10 +11,10 @@ export async function status() {
     await bootstrap();
 
     const [rows] = await db.query(
-        "SELECT name, ran_at FROM migrations ORDER BY ran_at ASC, id ASC",
+        "SELECT name, ran_at, dirty FROM migrations ORDER BY ran_at ASC, id ASC",
     );
 
-    const applied = new Map(rows.map((r) => [r.name, r.ran_at]));
+    const applied = new Map(rows.map((r) => [r.name, { ranAt: r.ran_at, dirty: r.dirty }]));
 
     const files = existsSync(MIGRATIONS_DIR)
         ? readdirSync(MIGRATIONS_DIR)
@@ -42,12 +42,14 @@ export async function status() {
 
     for (const name of files) {
         if (applied.has(name)) {
-            const ranAt = new Date(applied.get(name))
+            const { ranAt, dirty } = applied.get(name);
+            const ranAtStr = new Date(ranAt)
                 .toISOString()
                 .replace("T", " ")
                 .slice(0, 19);
+            const statusStr = dirty ? "applied (dirty)" : "applied";
             console.log(
-                `  ${name.padEnd(PAD)} ${"applied".padEnd(12)} ${ranAt}`,
+                `  ${name.padEnd(PAD)} ${statusStr.padEnd(12)} ${ranAtStr}`,
             );
         } else {
             console.log(`  ${name.padEnd(PAD)} ${"pending".padEnd(12)}`);
@@ -55,11 +57,13 @@ export async function status() {
     }
 
     for (const name of missing) {
-        const ranAt = new Date(applied.get(name))
+        const { ranAt, dirty } = applied.get(name);
+        const ranAtStr = new Date(ranAt)
             .toISOString()
             .replace("T", " ")
             .slice(0, 19);
-        console.log(`  ${name.padEnd(PAD)} ${"! missing".padEnd(12)} ${ranAt}`);
+        const statusStr = dirty ? "! missing (dirty)" : "! missing";
+        console.log(`  ${name.padEnd(PAD)} ${statusStr.padEnd(12)} ${ranAtStr}`);
     }
 
     console.log("");
