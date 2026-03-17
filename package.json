@@ -1,6 +1,6 @@
 {
     "name": "@boxctl/migrate",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "description": "Minimal SQL migration tool for MySQL/MariaDB over Unix socket",
     "type": "module",
     "bin": {
