@@ -23,3 +23,12 @@ export default async function getDb() {
 
     return connection;
 }
+
+export async function closeDb() {
+    if (!connection) return;
+    try {
+        await connection.end();
+    } catch {
+        // connection may already be closed
+    }
+}

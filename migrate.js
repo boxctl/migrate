@@ -20,7 +20,7 @@ if (command === "--help" || command === "-h" || !command) {
 import { create } from "./src/commands/create.js";
 import { up } from "./src/commands/up.js";
 import { status } from "./src/commands/status.js";
-import getDb from "./src/db.js";
+import { closeDb } from "./src/db.js";
 
 async function main() {
     switch (command) {
@@ -47,10 +47,5 @@ main()
         process.exit(1);
     })
     .finally(async () => {
-        try {
-            const db = await getDb();
-            await db.end();
-        } catch {
-            // connection may already be closed or never opened
-        }
+        await closeDb();
     });
