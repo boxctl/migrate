@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // migrate.js
 import { create } from "./src/commands/create.js";
 import { up } from "./src/commands/up.js";
@@ -51,5 +50,9 @@ main()
         process.exit(1);
     })
     .finally(async () => {
-        await db.end();
+        try {
+            await db.end();
+        } catch {
+            // connection may already be closed
+        }
     });

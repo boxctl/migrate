@@ -14,7 +14,17 @@ function prompt(question) {
             input: process.stdin,
             output: process.stdout,
         });
+
+        const onSigint = () => {
+            rl.close();
+            console.log("\nAborted.");
+            process.exit(0);
+        };
+
+        process.on("SIGINT", onSigint);
+
         rl.question(question, (answer) => {
+            process.removeListener("SIGINT", onSigint);
             rl.close();
             resolve(answer.trim().toLowerCase());
         });
@@ -34,7 +44,7 @@ export async function down(n = 1) {
     await bootstrap();
 
     // get applied migrations, most recent first
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
         "SELECT name FROM migrations ORDER BY ran_at DESC, id DESC LIMIT ?",
         [count],
     );
@@ -60,33 +70,32 @@ export async function down(n = 1) {
         return;
     }
 
-    await db.beginTransaction();
+    for (const name of toRevert) {
+        const downFile = join(MIGRATIONS_DIR, `${name}.down.sql`);
 
-    try {
-        for (const name of toRevert) {
-            const downFile = join(MIGRATIONS_DIR, `${name}.down.sql`);
-
-            if (!existsSync(downFile)) {
-                throw new Error(`Down file not found for migration: ${name}`);
-            }
-
-            const sql = readFileSync(downFile, "utf8").trim();
-
-            if (!sql || sql.startsWith("--")) {
-                throw new Error(`Down file is empty for migration: ${name}`);
-            }
-
-            console.log(`  Reverting: ${name}`);
-            await db.query(sql);
-            await db.execute("DELETE FROM migrations WHERE name = ?", [name]);
+        if (!existsSync(downFile)) {
+            console.error(`Down file not found for migration: ${name}`);
+            console.error(`Expected: ${downFile}`);
+            process.exit(1);
         }
 
-        await db.commit();
-        console.log("Done.");
-    } catch (err) {
-        await db.rollback();
-        console.error("Revert failed. All changes have been rolled back.");
-        console.error(err.message);
-        process.exit(1);
+        const sql = readFileSync(downFile, "utf8").trim();
+
+        if (!sql || sql.startsWith("--")) {
+            console.error(`Down file is empty for migration: ${name}`);
+            process.exit(1);
+        }
+
+        console.log(`  Reverting: ${name}`);
+        try {
+            await db.query(sql);
+            await db.query("DELETE FROM migrations WHERE name = ?", [name]);
+        } catch (err) {
+            console.error(`Revert failed: ${name}`);
+            console.error(err.message);
+            process.exit(1);
+        }
     }
+
+    console.log("Done.");
 }

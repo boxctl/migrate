@@ -22,10 +22,12 @@ export async function create(name) {
         process.exit(1);
     }
 
-    const timestamp = new Date()
+    const now = new Date();
+    const timestamp = now
         .toISOString()
-        .replace(/[-T:.Z]/g, "")
-        .slice(0, 14);
+        .replace(/[-T:Z]/g, "")
+        .replace(".", "")
+        .slice(0, 17);
     const baseName = `${timestamp}_${safeName}`;
 
     if (!existsSync(MIGRATIONS_DIR)) {

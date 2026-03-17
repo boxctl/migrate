@@ -6,6 +6,14 @@ import { bootstrap } from "../bootstrap.js";
 
 const MIGRATIONS_DIR = "./migrations";
 
+function isSqlEmpty(sql) {
+    const lines = sql.split("\n");
+    return lines.every((line) => {
+        const trimmed = line.trim();
+        return trimmed === "" || trimmed.startsWith("--");
+    });
+}
+
 export async function up() {
     await bootstrap();
 
@@ -25,7 +33,7 @@ export async function up() {
     }
 
     // get already applied migrations from db
-    const [rows] = await db.execute("SELECT name FROM migrations");
+    const [rows] = await db.query("SELECT name FROM migrations");
     const applied = new Set(rows.map((r) => r.name));
 
     const pending = files
@@ -39,33 +47,40 @@ export async function up() {
 
     console.log(`Running ${pending.length} migration(s)...`);
 
-    await db.beginTransaction();
+    for (const migration of pending) {
+        const downFile = join(MIGRATIONS_DIR, `${migration.name}.down.sql`);
 
-    try {
-        for (const migration of pending) {
-            const sql = readFileSync(
-                join(MIGRATIONS_DIR, migration.file),
-                "utf8",
-            ).trim();
-
-            if (!sql || sql.startsWith("--")) {
-                console.warn(`  Skipping empty migration: ${migration.name}`);
-                continue;
-            }
-
-            console.log(`  Applying: ${migration.name}`);
-            await db.query(sql);
-            await db.execute("INSERT INTO migrations (name) VALUES (?)", [
-                migration.name,
-            ]);
+        if (!existsSync(downFile)) {
+            console.error(`Missing down file for migration: ${migration.name}`);
+            console.error(`Expected: ${downFile}`);
+            process.exit(1);
         }
 
-        await db.commit();
-        console.log("Done.");
-    } catch (err) {
-        await db.rollback();
-        console.error(`Migration failed. All changes have been rolled back.`);
-        console.error(err.message);
-        process.exit(1);
+        const sql = readFileSync(
+            join(MIGRATIONS_DIR, migration.file),
+            "utf8",
+        ).trim();
+
+        if (isSqlEmpty(sql)) {
+            console.error(
+                `Migration ${migration.name} contains no SQL (only comments/whitespace).`,
+            );
+            console.error(`Add SQL or delete the migration files.`);
+            process.exit(1);
+        }
+
+        console.log(`  Applying: ${migration.name}`);
+        try {
+            await db.query(sql);
+            await db.query("INSERT INTO migrations (name) VALUES (?)", [
+                migration.name,
+            ]);
+        } catch (err) {
+            console.error(`Migration failed: ${migration.name}`);
+            console.error(err.message);
+            process.exit(1);
+        }
     }
+
+    console.log("Done.");
 }

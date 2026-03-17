@@ -9,7 +9,7 @@ const MIGRATIONS_DIR = "./migrations";
 export async function status() {
     await bootstrap();
 
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
         "SELECT name, ran_at FROM migrations ORDER BY ran_at ASC, id ASC",
     );
 
