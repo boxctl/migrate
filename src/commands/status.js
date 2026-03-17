@@ -1,74 +1,80 @@
 // src/commands/status.js
 import { readdirSync, existsSync } from "fs";
-import { join } from "path";
 import getDb from "../db.js";
-import { bootstrap } from "../bootstrap.js";
 
 const MIGRATIONS_DIR = "./migrations";
 
+async function bootstrap(db) {
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS migrations (
+            id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name       VARCHAR(255) NOT NULL UNIQUE,
+            dirty      BOOLEAN DEFAULT FALSE,
+            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+}
+
+function formatDate(d) {
+    return new Date(d).toISOString().replace("T", " ").slice(0, 19);
+}
+
 export async function status() {
     const db = await getDb();
-    await bootstrap();
+    await bootstrap(db);
 
-    const [rows] = await db.query(
-        "SELECT name, ran_at, dirty FROM migrations ORDER BY ran_at ASC, id ASC",
+    const [dbRows] = await db.query(
+        "SELECT name, dirty, applied_at FROM migrations ORDER BY applied_at ASC, id ASC",
     );
 
-    const applied = new Map(rows.map((r) => [r.name, { ranAt: r.ran_at, dirty: r.dirty }]));
+    const dbMap = new Map(dbRows.map((r) => [r.name, r]));
 
     const files = existsSync(MIGRATIONS_DIR)
         ? readdirSync(MIGRATIONS_DIR)
-              .filter((f) => f.endsWith(".up.sql"))
+              .filter((f) => f.endsWith(".sql"))
               .sort()
-              .map((f) => f.replace(".up.sql", ""))
+              .map((f) => f.replace(".sql", ""))
         : [];
 
-    // migrations on disk but not in db
-    const pending = files.filter((name) => !applied.has(name));
+    const fileSet = new Set(files);
+    const allNames = [...new Set([...files, ...dbMap.keys()])];
 
-    // migrations in db but no file on disk (deleted/lost)
-    const missing = [...applied.keys()].filter((name) => !files.includes(name));
-
-    if (applied.size === 0 && pending.length === 0) {
+    if (allNames.length === 0) {
         console.log("No migrations found.");
         return;
     }
 
-    const PAD = 42;
+    const dirty = dbRows.filter((r) => r.dirty);
 
-    console.log("");
-    console.log(`  ${"Migration".padEnd(PAD)} ${"Status".padEnd(12)} Ran At`);
-    console.log(`  ${"─".repeat(PAD)} ${"─".repeat(12)} ${"─".repeat(20)}`);
-
-    for (const name of files) {
-        if (applied.has(name)) {
-            const { ranAt, dirty } = applied.get(name);
-            const ranAtStr = new Date(ranAt)
-                .toISOString()
-                .replace("T", " ")
-                .slice(0, 19);
-            const statusStr = dirty ? "applied (dirty)" : "applied";
-            console.log(
-                `  ${name.padEnd(PAD)} ${statusStr.padEnd(12)} ${ranAtStr}`,
-            );
-        } else {
-            console.log(`  ${name.padEnd(PAD)} ${"pending".padEnd(12)}`);
-        }
+    if (dirty.length > 0) {
+        console.log("\n  ! DIRTY MIGRATIONS\n");
+        console.table(dirty.map((r) => ({ Migration: r.name, "Applied At": formatDate(r.applied_at) })));
     }
 
-    for (const name of missing) {
-        const { ranAt, dirty } = applied.get(name);
-        const ranAtStr = new Date(ranAt)
-            .toISOString()
-            .replace("T", " ")
-            .slice(0, 19);
-        const statusStr = dirty ? "! missing (dirty)" : "! missing";
-        console.log(`  ${name.padEnd(PAD)} ${statusStr.padEnd(12)} ${ranAtStr}`);
-    }
+    const rows = allNames.map((name) => {
+        const rec = dbMap.get(name);
+        if (!rec) return { Migration: name, Status: "pending", "Applied At": "" };
+        if (rec.dirty) return { Migration: name, Status: "dirty", "Applied At": formatDate(rec.applied_at) };
+        if (!fileSet.has(name)) return { Migration: name, Status: "missing", "Applied At": formatDate(rec.applied_at) };
+        return { Migration: name, Status: "applied", "Applied At": formatDate(rec.applied_at) };
+    });
 
     console.log("");
-    console.log(
-        `  ${applied.size} applied, ${pending.length} pending${missing.length > 0 ? `, ${missing.length} missing file(s)` : ""}`,
-    );
-    console.log("");
+    console.table(rows);
+
+    const counts = {
+        applied: rows.filter((r) => r.Status === "applied").length,
+        pending: rows.filter((r) => r.Status === "pending").length,
+        dirty: dirty.length,
+        missing: rows.filter((r) => r.Status === "missing").length,
+    };
+
+    const summary = [
+        `${counts.applied} applied`,
+        `${counts.pending} pending`,
+        ...(counts.dirty > 0 ? [`${counts.dirty} dirty`] : []),
+        ...(counts.missing > 0 ? [`${counts.missing} missing`] : []),
+    ].join(", ");
+
+    console.log(`  ${summary}\n`);
 }

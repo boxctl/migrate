@@ -17,11 +17,7 @@ export default async function getDb() {
             multipleStatements: true,
         });
     } catch (err) {
-        console.error(`Failed to connect to database:`);
-        console.error(`  Socket: ${env.DB_SOCK}`);
-        console.error(`  Database: ${env.DB_NAME}`);
-        console.error(`  User: ${env.DB_USER}`);
-        console.error(`  Error: ${err.message}`);
+        console.error(`Failed to connect to database: ${err.message}`);
         process.exit(1);
     }
 

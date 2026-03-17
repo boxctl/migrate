@@ -1,33 +1,29 @@
 // src/commands/up.js
 import { readdirSync, readFileSync, existsSync } from "fs";
-import { createHash } from "crypto";
 import { join } from "path";
 import getDb from "../db.js";
-import { bootstrap } from "../bootstrap.js";
 
 const MIGRATIONS_DIR = "./migrations";
 
-function checksum(sql) {
-    return createHash("sha256").update(sql, "utf8").digest("hex");
-}
-
-function isSqlEmpty(sql) {
-    const lines = sql.split("\n");
-    return lines.every((line) => {
-        const trimmed = line.trim();
-        return trimmed === "" || trimmed.startsWith("--");
-    });
+async function bootstrap(db) {
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS migrations (
+            id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            name       VARCHAR(255) NOT NULL UNIQUE,
+            dirty      BOOLEAN DEFAULT FALSE,
+            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
 }
 
 export async function up() {
     const db = await getDb();
-    await bootstrap();
+    await bootstrap(db);
 
-    const [dirtyRows] = await db.query("SELECT name FROM migrations WHERE dirty = true");
+    const [dirtyRows] = await db.query("SELECT name FROM migrations WHERE dirty = TRUE");
     if (dirtyRows.length > 0) {
-        throw new Error(
-            "Database is in dirty state. Fix the issue manually, then clear the dirty flag in the database.",
-        );
+        const names = dirtyRows.map((r) => `  - ${r.name}`).join("\n");
+        throw new Error(`Dirty migrations detected, resolve before running up:\n${names}`);
     }
 
     if (!existsSync(MIGRATIONS_DIR)) {
@@ -35,9 +31,8 @@ export async function up() {
         return;
     }
 
-    // get all .up.sql files, sorted ascending by filename (timestamp prefix ensures order)
     const files = readdirSync(MIGRATIONS_DIR)
-        .filter((f) => f.endsWith(".up.sql"))
+        .filter((f) => f.endsWith(".sql"))
         .sort();
 
     if (files.length === 0) {
@@ -45,31 +40,12 @@ export async function up() {
         return;
     }
 
-    // get already applied migrations from db
-    const [rows] = await db.query("SELECT name, checksum FROM migrations WHERE dirty = false");
-    const applied = new Map(rows.map((r) => [r.name, r.checksum]));
+    const [rows] = await db.query("SELECT name FROM migrations WHERE dirty = FALSE");
+    const applied = new Set(rows.map((r) => r.name));
 
     const pending = files
-        .map((f) => ({ file: f, name: f.replace(".up.sql", "") }))
+        .map((f) => ({ file: f, name: f.replace(".sql", "") }))
         .filter((m) => !applied.has(m.name));
-
-    const checksumMismatch = [];
-    for (const f of files) {
-        const name = f.replace(".up.sql", "");
-        if (applied.has(name)) {
-            const sql = readFileSync(join(MIGRATIONS_DIR, f), "utf8").trim();
-            const fileChecksum = checksum(sql);
-            if (fileChecksum !== applied.get(name)) {
-                checksumMismatch.push(name);
-            }
-        }
-    }
-
-    if (checksumMismatch.length > 0) {
-        console.error("Migration file(s) modified after being applied:");
-        checksumMismatch.forEach((name) => console.error(`  - ${name}`));
-        throw new Error("Restore the original file(s) or manually fix the database.");
-    }
 
     if (pending.length === 0) {
         console.log("Nothing to run. All migrations are up to date.");
@@ -79,43 +55,16 @@ export async function up() {
     console.log(`Running ${pending.length} migration(s)...`);
 
     for (const migration of pending) {
-        const downFile = join(MIGRATIONS_DIR, `${migration.name}.down.sql`);
-
-        if (!existsSync(downFile)) {
-            throw new Error(
-                `Missing down file for migration: ${migration.name}\nExpected: ${downFile}`,
-            );
-        }
-
-        const sql = readFileSync(
-            join(MIGRATIONS_DIR, migration.file),
-            "utf8",
-        ).trim();
-
-        if (isSqlEmpty(sql)) {
-            throw new Error(
-                `Migration ${migration.name} contains no SQL (only comments/whitespace). Add SQL or delete the migration files.`,
-            );
-        }
+        const sql = readFileSync(join(MIGRATIONS_DIR, migration.file), "utf8").trim();
 
         console.log(`  Applying: ${migration.name}`);
+
+        await db.query("INSERT INTO migrations (name, dirty) VALUES (?, TRUE)", [migration.name]);
+
         try {
             await db.query(sql);
-            const fileChecksum = checksum(sql);
-            await db.query("INSERT INTO migrations (name, checksum) VALUES (?, ?)", [
-                migration.name,
-                fileChecksum,
-            ]);
+            await db.query("UPDATE migrations SET dirty = FALSE WHERE name = ?", [migration.name]);
         } catch (err) {
-            const fileChecksum = checksum(sql);
-            try {
-                await db.query(
-                    "INSERT INTO migrations (name, checksum, dirty) VALUES (?, ?, true)",
-                    [migration.name, fileChecksum],
-                );
-            } catch (insertErr) {
-                console.error("Warning: failed to record migration failure:", insertErr.message);
-            }
             throw new Error(`Migration failed: ${migration.name}\n${err.message}`);
         }
     }

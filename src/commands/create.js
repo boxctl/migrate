@@ -9,7 +9,6 @@ export async function create(name) {
         throw new Error("Usage: migrate create <name>");
     }
 
-    // sanitize name: lowercase, spaces to underscores, strip special chars
     const safeName = name
         .trim()
         .toLowerCase()
@@ -21,28 +20,29 @@ export async function create(name) {
     }
 
     const now = new Date();
-    const timestamp = now
-        .toISOString()
-        .replace(/[-T:Z]/g, "")
-        .replace(".", "")
-        .slice(0, 17);
+    const pad = (n, l = 2) => String(n).padStart(l, "0");
+    const timestamp =
+        now.getUTCFullYear() +
+        pad(now.getUTCMonth() + 1) +
+        pad(now.getUTCDate()) +
+        pad(now.getUTCHours()) +
+        pad(now.getUTCMinutes()) +
+        pad(now.getUTCSeconds()) +
+        pad(now.getUTCMilliseconds(), 3);
+
     const baseName = `${timestamp}_${safeName}`;
 
     if (!existsSync(MIGRATIONS_DIR)) {
         mkdirSync(MIGRATIONS_DIR, { recursive: true });
     }
 
-    const upFile = join(MIGRATIONS_DIR, `${baseName}.up.sql`);
-    const downFile = join(MIGRATIONS_DIR, `${baseName}.down.sql`);
+    const file = join(MIGRATIONS_DIR, `${baseName}.sql`);
 
-    if (existsSync(upFile) || existsSync(downFile)) {
-        throw new Error(`Migration files for "${baseName}" already exist.`);
+    if (existsSync(file)) {
+        throw new Error(`Migration file "${baseName}.sql" already exists.`);
     }
 
-    writeFileSync(upFile, `-- migrate up: ${safeName}\n`);
-    writeFileSync(downFile, `-- migrate down: ${safeName}\n`);
+    writeFileSync(file, `-- ${baseName}.sql\n-- refs:\n`);
 
-    console.log(`Created:`);
-    console.log(`  ${upFile}`);
-    console.log(`  ${downFile}`);
+    console.log(`Created: ${file}`);
 }

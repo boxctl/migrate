@@ -47,9 +47,7 @@ function loadEnv() {
     const missing = required.filter((k) => !parsed[k]);
 
     if (missing.length > 0) {
-        console.error(
-            `Missing required variables in ${envFile}: ${missing.join(", ")}`,
-        );
+        console.error(`Missing required variables in ${envFile}: ${missing.join(", ")}`);
         process.exit(1);
     }
 
