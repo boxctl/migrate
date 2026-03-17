@@ -2,9 +2,8 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { createInterface } from "readline";
-import db from "../db.js";
+import getDb from "../db.js";
 import { bootstrap } from "../bootstrap.js";
-import { env } from "../env.js";
 
 const MIGRATIONS_DIR = "./migrations";
 
@@ -32,6 +31,7 @@ function prompt(question) {
 }
 
 export async function down(n = 1) {
+    const db = await getDb();
     const count = parseInt(n, 10);
 
     if (isNaN(count) || count < 1) {
@@ -50,18 +50,14 @@ export async function down(n = 1) {
     );
 
     if (rows.length === 0) {
-        console.log("Nothing to revert. No migrations have been applied.");
+        console.log("Nothing to cleanup. No migrations have been applied.");
         return;
     }
 
     const toRevert = rows.map((r) => r.name);
 
-    console.log(`About to revert ${toRevert.length} migration(s):`);
+    console.log(`About to cleanup ${toRevert.length} migration(s):`);
     toRevert.forEach((name) => console.log(`  - ${name}`));
-
-    if (env.isProd) {
-        console.warn("\n  Warning: you are on production.\n");
-    }
 
     const answer = await prompt("Are you sure? [y/N]: ");
 
@@ -86,16 +82,16 @@ export async function down(n = 1) {
             process.exit(1);
         }
 
-        console.log(`  Reverting: ${name}`);
+        console.log(`  Cleaning up: ${name}`);
         try {
             await db.query(sql);
             await db.query("DELETE FROM migrations WHERE name = ?", [name]);
         } catch (err) {
-            console.error(`Revert failed: ${name}`);
+            console.error(`Cleanup failed: ${name}`);
             console.error(err.message);
             process.exit(1);
         }
     }
 
-    console.log("Done.");
+    console.log("Cleanup complete.");
 }

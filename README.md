@@ -12,10 +12,15 @@ npx @boxctl/migrate <command>
 
 ### Commands
 
-- `create <name>` — Create a new migration
+- `create <name>` — Create a new migration file pair
 - `up` — Run pending migrations
-- `down` — Rollback the last migration
+- `down [n]` — Cleanup last n migrations (default: 1)
 - `status` — Show migration status
+
+### Options
+
+- `--env=<file>` — Specify env file (default: .env)
+- `--help` — Show help message
 
 ## Setup
 
@@ -27,6 +32,21 @@ DB_NAME=your_database
 DB_USER=username
 DB_PASS=********
 ```
+
+Use a different env file:
+
+```bash
+npx @boxctl/migrate up --env=.env.staging
+```
+
+## Migrations
+
+Migrations are stored in `./migrations/` directory with two files per migration:
+
+- `*.up.sql` — Migration to apply
+- `*.down.sql` — Cleanup script (manual inverse, not automatic rollback)
+
+> **Important:** `.down.sql` is manual cleanup, not automatic database rollback. Since MySQL DDL cannot be rolled back, you must write the inverse operation yourself.
 
 ## Requirements
 

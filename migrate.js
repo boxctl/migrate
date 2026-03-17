@@ -1,11 +1,28 @@
 // migrate.js
+const [, , command, ...args] = process.argv;
+
+if (command === "--help" || command === "-h" || !command) {
+    console.log("");
+    console.log("  Usage: migrate <command> [options]");
+    console.log("");
+    console.log("  Commands:");
+    console.log("    create <name>   Create a new migration file pair");
+    console.log("    up              Run all pending migrations");
+    console.log("    down [n]        Cleanup last n migrations (default: 1)");
+    console.log("    status          Show applied and pending migrations");
+    console.log("");
+    console.log("  Options:");
+    console.log("    --env=<file>    Specify env file (default: .env)");
+    console.log("    --help          Show this help message");
+    console.log("");
+    process.exit(command ? 0 : 1);
+}
+
 import { create } from "./src/commands/create.js";
 import { up } from "./src/commands/up.js";
 import { down } from "./src/commands/down.js";
 import { status } from "./src/commands/status.js";
-import db from "./src/db.js";
-
-const [, , command, ...args] = process.argv;
+import getDb from "./src/db.js";
 
 async function main() {
     switch (command) {
@@ -25,22 +42,6 @@ async function main() {
             await status();
             break;
         }
-        default: {
-            console.log("");
-            console.log("  Usage: migrate <command> [options]");
-            console.log("");
-            console.log("  Commands:");
-            console.log("    create <name>   Create a new migration file pair");
-            console.log("    up              Run all pending migrations");
-            console.log(
-                "    down [n]        Revert last n migrations (default: 1)",
-            );
-            console.log(
-                "    status          Show applied and pending migrations",
-            );
-            console.log("");
-            process.exit(command ? 1 : 0);
-        }
     }
 }
 
@@ -51,6 +52,7 @@ main()
     })
     .finally(async () => {
         try {
+            const db = await getDb();
             await db.end();
         } catch {
             // connection may already be closed

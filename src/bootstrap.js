@@ -1,7 +1,8 @@
 // src/bootstrap.js
-import db from "./db.js";
+import getDb from "./db.js";
 
 export async function bootstrap() {
+    const db = await getDb();
     try {
         await db.query(`
     CREATE TABLE IF NOT EXISTS migrations (

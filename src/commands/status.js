@@ -1,12 +1,13 @@
 // src/commands/status.js
 import { readdirSync, existsSync } from "fs";
 import { join } from "path";
-import db from "../db.js";
+import getDb from "../db.js";
 import { bootstrap } from "../bootstrap.js";
 
 const MIGRATIONS_DIR = "./migrations";
 
 export async function status() {
+    const db = await getDb();
     await bootstrap();
 
     const [rows] = await db.query(

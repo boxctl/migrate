@@ -1,7 +1,7 @@
 // src/commands/up.js
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
-import db from "../db.js";
+import getDb from "../db.js";
 import { bootstrap } from "../bootstrap.js";
 
 const MIGRATIONS_DIR = "./migrations";
@@ -15,6 +15,7 @@ function isSqlEmpty(sql) {
 }
 
 export async function up() {
+    const db = await getDb();
     await bootstrap();
 
     if (!existsSync(MIGRATIONS_DIR)) {
